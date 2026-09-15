@@ -133,7 +133,7 @@ const lasers = [];
 // PISO FÍSICO
 // =====================================================
 // Suelo estático propio del mundo Rapier (independiente del trimesh que se
-// genera al cargar collision-world.glb). Existe desde el primer frame, así
+// genera al cargar space_ship_hallway.glb). Existe desde el primer frame, así
 // las cajas dinámicas siempre tienen dónde caer aunque el modelo GLTF todavía
 // no haya terminado de cargar (carga asíncrona).
 
@@ -177,7 +177,15 @@ function createDynamicBox(x, y, z, sx, sy, sz, mass = 4) {
     const bodyDesc = RAPIER.RigidBodyDesc
         .dynamic()
         .setTranslation(x, y, z)
-        .setGravityScale(1.0);
+        .setGravityScale(1.0)
+        // Amortiguación lineal/angular para que la caja pierda energía al girar
+        // y se asiente de forma creíble en vez de rotar indefinidamente.
+        .setLinearDamping(0.05)
+        .setAngularDamping(0.2)
+        // CCD (Continuous Collision Detection): evita que una caja golpeada con
+        // fuerza (láser, empujón del jugador) atraviese una pared delgada del
+        // pasillo en un solo paso de física.
+        .setCcdEnabled(true);
 
     const body = physicsWorld.createRigidBody(bodyDesc);
 
@@ -284,7 +292,10 @@ loader.load(
 
                     const bodyDesc = RAPIER.RigidBodyDesc.fixed();
                     const body = physicsWorld.createRigidBody(bodyDesc);
-                    const colliderDesc = RAPIER.ColliderDesc.trimesh(transformedVertices, indices);
+                    const colliderDesc = RAPIER.ColliderDesc
+                        .trimesh(transformedVertices, indices)
+                        .setFriction(0.8)
+                        .setRestitution(0.05);
                     physicsWorld.createCollider(colliderDesc, body);
                 }
             }
@@ -389,6 +400,11 @@ function updatePlayer(deltaTime) {
 // DISPARAR LÁSER
 // =====================================================
 
+// Paleta "bala neón" del láser: rojo saturado con emisivo casi puro para que
+// destaque como una fuente de luz propia en el pasillo oscuro.
+const LASER_COLOR = 0xff0a2e;
+const LASER_EMISSIVE = 0xff0000;
+
 function shootLaser() {
     if (document.pointerLockElement !== renderer.domElement) return;
 
@@ -400,9 +416,9 @@ function shootLaser() {
     geometry.rotateX(Math.PI / 2);
 
     const material = new THREE.MeshStandardMaterial({
-        color: 0x67e8f9,
-        emissive: 0x22d3ee,
-        emissiveIntensity: 5
+        color: LASER_COLOR,
+        emissive: LASER_EMISSIVE,
+        emissiveIntensity: 6
     });
 
     const mesh = new THREE.Mesh(geometry, material);
@@ -410,13 +426,18 @@ function shootLaser() {
     mesh.position.addScaledVector(direction, 0.8);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
 
+    // Luz puntual que viaja pegada a la bala: es lo que le da el look "neón",
+    // proyectando un resplandor rojo sobre las paredes mientras vuela.
+    const glow = new THREE.PointLight(LASER_EMISSIVE, 4, 3.5, 2);
+    mesh.add(glow);
+
     scene.add(mesh);
 
     lasers.push({ mesh, direction, speed: 32, life: 1.7 });
 }
 
 function createImpact(position) {
-    const flash = new THREE.PointLight(0x67e8f9, 8, 4, 2);
+    const flash = new THREE.PointLight(LASER_EMISSIVE, 8, 4, 2);
     flash.position.copy(position);
     scene.add(flash);
     setTimeout(() => scene.remove(flash), 90);
