@@ -71,6 +71,16 @@ sun.castShadow = true;
 
 sun.shadow.mapSize.set(2048, 2048);
 
+// Frustum de la cámara de sombras ampliado para cubrir todo collision-world.glb,
+// no solo el área ±5 por defecto de THREE.DirectionalLight.
+sun.shadow.camera.near = 0.1;
+sun.shadow.camera.far = 100;
+sun.shadow.camera.left = -30;
+sun.shadow.camera.right = 30;
+sun.shadow.camera.top = 30;
+sun.shadow.camera.bottom = -30;
+sun.shadow.bias = -0.00006;
+
 scene.add(sun);
 
 
@@ -81,6 +91,10 @@ scene.add(sun);
 const timer = new THREE.Timer();
 
 const worldOctree = new Octree();
+
+// Submuestreo de la física del jugador: cada frame se resuelve en varios
+// pasos pequeños para que la cápsula no atraviese paredes/escaleras a alta velocidad.
+const STEPS_PER_FRAME = 5;
 
 
 // =====================================================
@@ -476,9 +490,14 @@ document.addEventListener('mousedown', (event) => {
 function animate() {
     timer.update();
     const delta = Math.min(0.05, timer.getDelta());
+    const subDelta = delta / STEPS_PER_FRAME;
 
-    controls(delta);
-    updatePlayer(delta);
+    // Varios pasos cortos de movimiento/colisión por frame (igual que games_fps)
+    // en vez de uno solo con el delta completo.
+    for (let i = 0; i < STEPS_PER_FRAME; i++) {
+        controls(subDelta);
+        updatePlayer(subDelta);
+    }
 
     physicsWorld.step();
 
