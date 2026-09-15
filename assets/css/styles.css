@@ -29,7 +29,15 @@ canvas { display: block; }
 
   pointer-events: none;
 
+  opacity: .35; transition: opacity .2s ease;
+
 }
+
+body.is-locked .crosshair { opacity: 1; }
+
+#pointer-hint { transition: color .2s ease; }
+
+body.is-locked #pointer-hint { color: #67e8f9; }
 
 .app-footer {
 

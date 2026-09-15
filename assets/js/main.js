@@ -52,6 +52,8 @@ renderer.shadowMap.enabled = true;
 
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+renderer.domElement.tabIndex = -1;
+
 container.appendChild(renderer.domElement);
 
 
@@ -428,9 +430,29 @@ function syncPhysics() {
 document.addEventListener('keydown', (event) => { keyStates[event.code] = true; });
 document.addEventListener('keyup', (event) => { keyStates[event.code] = false; });
 
+const pointerHint = document.getElementById('pointer-hint');
+
 renderer.domElement.addEventListener('click', () => {
     if (document.pointerLockElement !== renderer.domElement) {
         renderer.domElement.requestPointerLock();
+    }
+});
+
+document.addEventListener('pointerlockchange', () => {
+    const isLocked = document.pointerLockElement === renderer.domElement;
+    document.body.classList.toggle('is-locked', isLocked);
+
+    if (pointerHint) {
+        pointerHint.textContent = isLocked
+            ? 'Pointer Lock activo · ESC para liberar el mouse.'
+            : 'Haz clic en el escenario para activar el mouse.';
+    }
+});
+
+document.addEventListener('pointerlockerror', () => {
+    console.error('No se pudo activar Pointer Lock en el canvas.');
+    if (pointerHint) {
+        pointerHint.textContent = 'No se pudo activar el control por mouse. Intenta hacer clic de nuevo.';
     }
 });
 
@@ -476,5 +498,6 @@ renderer.setAnimationLoop(animate);
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
