@@ -130,6 +130,25 @@ const lasers = [];
 
 
 // =====================================================
+// PISO FÍSICO
+// =====================================================
+// Suelo estático propio del mundo Rapier (independiente del trimesh que se
+// genera al cargar collision-world.glb). Existe desde el primer frame, así
+// las cajas dinámicas siempre tienen dónde caer aunque el modelo GLTF todavía
+// no haya terminado de cargar (carga asíncrona).
+
+const groundBodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.5, 0);
+const groundBody = physicsWorld.createRigidBody(groundBodyDesc);
+
+const groundColliderDesc = RAPIER.ColliderDesc
+    .cuboid(100, 0.5, 100)
+    .setFriction(0.9)
+    .setRestitution(0.1);
+
+physicsWorld.createCollider(groundColliderDesc, groundBody);
+
+
+// =====================================================
 // CREAR CUBO DINÁMICO
 // =====================================================
 
@@ -187,16 +206,25 @@ function createDynamicBox(x, y, z, sx, sy, sz, mass = 4) {
 function spawnRandomFallingBoxes() {
     const totalBoxes = THREE.MathUtils.randInt(15, 25);
 
+    // El pasillo (space_ship_hallway.glb) es angosto y cerrado: interior útil
+    // aprox. x:[-1.6,1.6] (evita paredes/bancas laterales), z:[-12,12] (evita
+    // las puertas de los extremos) y techo en y≈7 (evita que las cajas
+    // aparezcan encima del techo, fuera del volumen colisionable).
     for (let i = 0; i < totalBoxes; i++) {
-        const sx = THREE.MathUtils.randFloat(0.8, 2.0);
-        const sy = THREE.MathUtils.randFloat(0.8, 2.0);
-        const sz = THREE.MathUtils.randFloat(0.8, 2.0);
+        const sx = THREE.MathUtils.randFloat(0.5, 1.1);
+        const sy = THREE.MathUtils.randFloat(0.5, 1.1);
+        const sz = THREE.MathUtils.randFloat(0.5, 1.1);
 
-        const x = THREE.MathUtils.randFloat(-10, 10);
-        const z = THREE.MathUtils.randFloat(-10, 10);
-        const y = THREE.MathUtils.randFloat(8, 22) + (i * 0.2);
+        const x = THREE.MathUtils.randFloat(-1.6, 1.6);
+        const z = THREE.MathUtils.randFloat(-12, 12);
+        const y = THREE.MathUtils.randFloat(3, 6) + (i * 0.15);
 
-        createDynamicBox(x, y, z, sx, sy, sz, 3);
+        // Masa real independiente del tamaño (setDensity ya compensa el volumen),
+        // para que unas cajas sean claramente más ligeras/pesadas que otras
+        // al empujarlas con el jugador o el láser.
+        const mass = THREE.MathUtils.randFloat(1, 12);
+
+        createDynamicBox(x, y, z, sx, sy, sz, mass);
     }
 }
 
@@ -210,9 +238,18 @@ spawnRandomFallingBoxes();
 const loader = new GLTFLoader();
 
 loader.load(
-    './assets/models/collision-world.glb',
+    './assets/models/space_ship_hallway.glb',
     (gltf) => {
         const model = gltf.scene;
+
+        // El modelo no viene centrado en el origen ni con el piso en y=0
+        // (su bounding box original es aprox. x:[15.9,24.3] y:[-3.1,3.9] z:[-25.6,3.6]).
+        // Lo recentramos en x/z y bajamos el piso a y=0 para que calce con el
+        // spawn del jugador, el piso físico de Rapier y el reset por caída.
+        const bounds = new THREE.Box3().setFromObject(model);
+        const center = bounds.getCenter(new THREE.Vector3());
+        model.position.set(-center.x, -bounds.min.y, -center.z);
+        model.updateMatrixWorld(true);
 
         model.traverse((child) => {
             if (child.isMesh) {
